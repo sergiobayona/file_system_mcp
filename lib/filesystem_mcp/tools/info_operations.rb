@@ -6,6 +6,7 @@ module FileSystemMCP
       def register
         register_get_file_info
         register_get_bulk_file_info
+        register_get_server_info
       end
 
       private
@@ -130,6 +131,61 @@ module FileSystemMCP
           error_type: e.class.name,
           error_message: e.message
         }
+      end
+
+      def register_get_server_info
+        @server.register_tool(
+          name: "get_server_info",
+          description: "Get server version, runtime information, and configuration details.",
+          input_schema: Schemas::Info::GET_SERVER_INFO
+        ) do |args|
+          handle_server_info
+        end
+      end
+
+      def handle_server_info
+        server_version = "0.5.0"
+        
+        info = {
+          server: {
+            name: "VectorMCP::FileSystemServer",
+            version: server_version,
+            framework: "vector_mcp",
+            framework_version: get_vector_mcp_version
+          },
+          runtime: {
+            ruby_version: RUBY_VERSION,
+            ruby_platform: RUBY_PLATFORM,
+            started_at: Time.now.utc.iso8601(3)
+          },
+          configuration: {
+            authentication_enabled: @server.respond_to?(:authentication_enabled?) ? @server.authentication_enabled? : false,
+            registered_roots: get_registered_roots_info
+          }
+        }
+
+        JSON.pretty_generate(info)
+      rescue StandardError => e
+        @logger.error "Error getting server info: #{e.message}"
+        "Error: #{e.message}"
+      end
+
+      def get_registered_roots_info
+        if @server.respond_to?(:roots)
+          @server.roots.map { |root| root.name }
+        else
+          ["information_not_available"]
+        end
+      rescue StandardError
+        ["information_not_available"]
+      end
+
+      def get_vector_mcp_version
+        Gem::Specification.find_by_name('vector_mcp').version.to_s
+      rescue Gem::LoadError
+        "unknown"
+      rescue StandardError
+        "unknown"
       end
     end
   end

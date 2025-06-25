@@ -27,6 +27,12 @@ module FileSystemMCP
         },
         required: ["paths"]
       }.freeze
+
+      GET_SERVER_INFO = {
+        type: "object",
+        properties: {},
+        additionalProperties: false
+      }.freeze
     end
   end
 end
