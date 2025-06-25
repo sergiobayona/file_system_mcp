@@ -60,7 +60,10 @@ Ruby server implementing Model Context Protocol (MCP) for filesystem operations 
 
 - **list_directory**
   - List directory contents as a JSON array, with each item containing 'name' and 'type' ('file' or 'directory').
-  - Input: `path` (string)
+  - Inputs:
+    - `path` (string): Directory path to list
+    - `include_metadata` (boolean, optional): Include file metadata (size, dates, permissions) in response (default: false)
+  - When `include_metadata` is true, adds: `size`, `modified`, `created`, `permissions`
 
 - **move_file**
   - Move or rename files and directories
@@ -78,6 +81,25 @@ Ruby server implementing Model Context Protocol (MCP) for filesystem operations 
   - Case-insensitive matching
   - Returns full paths to matches
 
+- **find_files**
+  - Advanced file finder with sorting, filtering, and metadata
+  - Inputs:
+    - `path` (string): Starting directory for search
+    - `sort_by` (string, optional): Sort by "modified", "created", "size", or "name" (default: "name")
+    - `order` (string, optional): Sort order "asc" or "desc" (default: "asc")
+    - `limit` (integer, optional): Maximum number of results to return
+    - `file_types` (string[], optional): Filter by file extensions (e.g., ["txt", "pdf", "jpg"])
+    - `modified_after` (string, optional): Only files modified after this ISO date
+    - `modified_before` (string, optional): Only files modified before this ISO date
+    - `min_size` (integer, optional): Minimum file size in bytes
+    - `max_size` (integer, optional): Maximum file size in bytes
+    - `include_directories` (boolean, optional): Include directories in results (default: true)
+  - Returns JSON with metadata: path, name, type, size, modified, created, permissions
+  - Examples:
+    - `find_files(path="Desktop", sort_by="modified", order="desc", limit=1)` - Most recently modified file
+    - `find_files(path="Documents", file_types=["pdf"], min_size=1000000)` - Large PDF files
+    - `find_files(path="Photos", modified_after="2025-01-01T00:00:00Z", sort_by="size")` - Recent photos by size
+
 - **get_file_info**
   - Get detailed file/directory metadata
   - Input: `path` (string)
@@ -88,6 +110,16 @@ Ruby server implementing Model Context Protocol (MCP) for filesystem operations 
     - Access time
     - Type (file/directory)
     - Permissions
+
+- **get_bulk_file_info**
+  - Retrieve metadata for multiple files/directories in a single operation
+  - Inputs:
+    - `paths` (string[]): Array of file/directory paths to get information about
+    - `include_errors` (boolean, optional): Include error information for inaccessible files (default: true)
+  - Returns JSON with summary statistics and detailed metadata for each file
+  - More efficient than multiple `get_file_info` calls
+  - Handles errors gracefully - continues processing other files if some fail
+  - Example: `get_bulk_file_info(paths=["file1.txt", "dir1/", "file2.pdf"])`
 
 - **list_allowed_directories**
   - List all directories the server is allowed to access

@@ -8,10 +8,24 @@ require "json"
 require "find"
 
 # Configuration & Argument Parsing
-args = ARGV
+args = ARGV.dup
+
+# Parse optional security flags
+enable_auth = args.delete("--enable-auth")
+api_key = nil
+
+if enable_auth
+  api_key = ENV["FILESYSTEM_MCP_API_KEY"]
+  if api_key.nil? || api_key.empty?
+    warn "Error: --enable-auth requires FILESYSTEM_MCP_API_KEY environment variable"
+    exit(1)
+  end
+end
+
 if args.empty?
-  warn "Usage: #{$PROGRAM_NAME} <allowed-directory-1> [allowed-directory-2 ...]"
+  warn "Usage: #{$PROGRAM_NAME} [--enable-auth] <allowed-directory-1> [allowed-directory-2 ...]"
   warn "Example: #{$PROGRAM_NAME} ~/projects /var/data"
+  warn "         FILESYSTEM_MCP_API_KEY=secret #{$PROGRAM_NAME} --enable-auth ~/projects"
   exit(1)
 end
 
@@ -27,12 +41,13 @@ dirs_to_register = args.map.with_index do |dir, index|
 end
 
 # Initialize server with modern API
-server = VectorMCP.new(name: "VectorMCP::FileSystemServer", version: "0.5.0")
+server = VectorMCP.new(name: "VectorMCP::FileSystemServer::Secure", version: "0.5.0")
 
 # Configure logging
 logger = VectorMCP.logger
 
-logger.info "MCP Filesystem Server (Roots-based) starting"
+logger.info "MCP Filesystem Server (Secure Mode, Roots-based) starting"
+logger.info "Authentication: #{enable_auth ? 'Enabled' : 'Disabled'}"
 logger.info "Registering roots for: #{dirs_to_register.map { |d| d[:original] }.join(', ')}"
 
 # Register filesystem roots - framework handles all validation
@@ -44,6 +59,31 @@ dirs_to_register.each do |dir_info|
     logger.error "Failed to register root for #{dir_info[:original]}: #{e.message}"
     exit(1)
   end
+end
+
+# Security configuration
+if enable_auth
+  server.enable_authentication!
+  server.add_api_key(api_key, user_id: "filesystem_user", capabilities: %w[read write admin])
+  
+  server.enable_authorization!
+  
+  # Define authorization policies
+  server.authorize_tool("read_file") { |context| context.authenticated? }
+  server.authorize_tool("read_multiple_files") { |context| context.authenticated? }
+  server.authorize_tool("list_directory") { |context| context.authenticated? }
+  server.authorize_tool("get_file_info") { |context| context.authenticated? }
+  server.authorize_tool("get_bulk_file_info") { |context| context.authenticated? }
+  server.authorize_tool("search_files") { |context| context.authenticated? }
+  server.authorize_tool("find_files") { |context| context.authenticated? }
+  
+  # Write operations require authentication
+  server.authorize_tool("write_file") { |context| context.authenticated? }
+  server.authorize_tool("edit_file") { |context| context.authenticated? }
+  server.authorize_tool("create_directory") { |context| context.authenticated? }
+  server.authorize_tool("move_file") { |context| context.authenticated? }
+  
+  logger.info "Security policies configured"
 end
 
 # Simplified diff function
@@ -61,7 +101,7 @@ end
 # Tool: read_file
 server.register_tool(
   name: "read_file",
-  description: "Read the complete contents of a single file. Only works within registered roots.",
+  description: "Read the complete contents of a single file. Only works within registered roots. Requires authentication in secure mode.",
   input_schema: {
     type: "object",
     properties: {
@@ -88,7 +128,7 @@ end
 # Tool: read_multiple_files
 server.register_tool(
   name: "read_multiple_files",
-  description: "Read the contents of multiple files. Returns content prefixed by path, or an error message per file.",
+  description: "Read the contents of multiple files. Returns content prefixed by path, or an error message per file. Requires authentication in secure mode.",
   input_schema: {
     type: "object",
     properties: {
@@ -117,7 +157,7 @@ end
 # Tool: write_file
 server.register_tool(
   name: "write_file",
-  description: "Create a new file or overwrite an existing file with content. Use with caution.",
+  description: "Create a new file or overwrite an existing file with content. Use with caution. Requires authentication in secure mode.",
   input_schema: {
     type: "object",
     properties: {
@@ -140,7 +180,7 @@ end
 # Tool: edit_file
 server.register_tool(
   name: "edit_file",
-  description: "Make exact text replacements in a file. Use dryRun=true to preview changes.",
+  description: "Make exact text replacements in a file. Use dryRun=true to preview changes. Requires authentication in secure mode.",
   input_schema: {
     type: "object",
     properties: {
@@ -205,7 +245,7 @@ end
 # Tool: create_directory
 server.register_tool(
   name: "create_directory",
-  description: "Create a directory, including parent directories if needed.",
+  description: "Create a directory, including parent directories if needed. Requires authentication in secure mode.",
   input_schema: {
     type: "object",
     properties: {
@@ -227,7 +267,7 @@ end
 # Tool: list_directory
 server.register_tool(
   name: "list_directory",
-  description: "List files and directories in a path as a JSON array.",
+  description: "List files and directories in a path as a JSON array. Requires authentication in secure mode.",
   input_schema: {
     type: "object",
     properties: {
@@ -288,7 +328,7 @@ end
 # Tool: move_file
 server.register_tool(
   name: "move_file",
-  description: "Move or rename a file or directory. Fails if the destination exists.",
+  description: "Move or rename a file or directory. Fails if the destination exists. Requires authentication in secure mode.",
   input_schema: {
     type: "object",
     properties: {
@@ -315,7 +355,7 @@ end
 # Tool: search_files
 server.register_tool(
   name: "search_files",
-  description: "Recursively search for files/directories matching a glob pattern.",
+  description: "Recursively search for files/directories matching a glob pattern. Requires authentication in secure mode.",
   input_schema: {
     type: "object",
     properties: {
@@ -372,7 +412,7 @@ end
 # Tool: find_files
 server.register_tool(
   name: "find_files",
-  description: "Advanced file finder with sorting, filtering, and metadata. Recursively searches directories with powerful filtering options.",
+  description: "Advanced file finder with sorting, filtering, and metadata. Recursively searches directories with powerful filtering options. Requires authentication in secure mode.",
   input_schema: {
     type: "object",
     properties: {
@@ -548,7 +588,7 @@ end
 # Tool: get_file_info
 server.register_tool(
   name: "get_file_info",
-  description: "Retrieve metadata (size, dates, type, permissions) for a file or directory.",
+  description: "Retrieve metadata (size, dates, type, permissions) for a file or directory. Requires authentication in secure mode.",
   input_schema: {
     type: "object",
     properties: {
@@ -582,7 +622,7 @@ end
 # Tool: get_bulk_file_info
 server.register_tool(
   name: "get_bulk_file_info",
-  description: "Retrieve metadata for multiple files or directories in a single operation. More efficient than multiple get_file_info calls.",
+  description: "Retrieve metadata for multiple files or directories in a single operation. More efficient than multiple get_file_info calls. Requires authentication in secure mode.",
   input_schema: {
     type: "object",
     properties: {
@@ -689,8 +729,8 @@ server.register_tool(
   end
 end
 
-# Use the built-in list_root_contents tool provided by the framework
-# No need to implement list_allowed_directories - the framework provides root management
+# Framework provides built-in root management tools
+# No need to implement list_allowed_directories
 
 # Run the server
 begin
