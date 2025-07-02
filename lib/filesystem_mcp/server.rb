@@ -4,7 +4,18 @@ module FileSystemMCP
   class Server
     def initialize(config)
       @config = config
-      @server = VectorMCP.new(name: "VectorMCP::FileSystemServer", version: "0.5.0")
+
+      # Initialize server with browser navigation support
+      server_options = {
+        name: "VectorMCP::FileSystemServer",
+        version: "0.5.0",
+        transport: :sse,  # Enable Server-Sent Events for browser navigation
+        host: "localhost",
+        port: 8080,
+        path_prefix: "/fs"
+      }
+
+      @server = VectorMCP.new(**server_options)
       @logger = VectorMCP.logger
     end
 
@@ -18,6 +29,7 @@ module FileSystemMCP
 
     def run
       @logger.info "Starting MCP server with #{@config.dirs_to_register.size} registered root(s)..."
+      @logger.info "Browser navigation available at: http://localhost:8080/fs/sse"
       @server.run
     rescue VectorMCP::Error => e
       @logger.fatal "VectorMCP Error: #{e.message}"
