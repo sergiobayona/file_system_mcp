@@ -22,8 +22,10 @@ module FileSystemMCP
           input_schema: Schemas::File::READ_FILE
         ) do |args|
           handle_file_error do
-            @logger.debug "Reading file: #{args['path']}"
-            File.read(args["path"])
+            # Normalize path for macOS compatibility with special characters
+            normalized_path = normalize_path(args["path"])
+            @logger.debug "Reading file: #{normalized_path.inspect}"
+            File.read(normalized_path)
           end
         end
       end

@@ -10,6 +10,19 @@ module FileSystemMCP
 
       protected
 
+      # Normalize paths for macOS compatibility with special characters
+      def normalize_path(path)
+        # Convert to UTF-8 and normalize Unicode composition
+        normalized = path.to_s.encode('UTF-8').unicode_normalize(:nfc)
+        
+        # Expand path to handle ~ and relative paths properly
+        File.expand_path(normalized)
+      rescue ArgumentError, Encoding::InvalidByteSequenceError => e
+        # If encoding fails, try to work with original path
+        @logger.warn "Path encoding issue (#{e.message}), using original: #{path.inspect}"
+        File.expand_path(path.to_s)
+      end
+
       def handle_file_error(&block)
         yield
       rescue Errno::ENOENT => e
